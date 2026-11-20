@@ -37,6 +37,36 @@
   outline: 3px solid #8ca67b;
   outline-offset: 4px;
 }
+.chart-plot {
+  position: relative;
+}
+.chart-point {
+  cursor: pointer;
+}
+.chart-point:focus-visible {
+  outline: none;
+}
+.chart-point:focus-visible .chart-hit-area {
+  stroke: var(--green);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.chart-tooltip {
+  position: absolute;
+  width: max-content;
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--green);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+}
+@media print {
+  .chart-tooltip {
+    display: none;
+  }
+}
 #contraction-dialog #timing-details {
   border-block: 1px solid var(--line);
   margin-bottom: 18px;
