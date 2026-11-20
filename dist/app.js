@@ -50,7 +50,7 @@ function overviewChart(rows,metric='duration'){
  const max=Math.max(60,...list.map(row=>row[metric]/1000));
  const axisStart=isSpacing?75:55;
  const bar=(735-axisStart)/list.length;
- const secondsFormat=new Intl.NumberFormat(undefined,{maximumFractionDigits:3,useGrouping:false});
+ const secondsFormat=new Intl.NumberFormat(undefined,{useGrouping:false});
  let svg='';
  for(let i=0;i<4;i++){
   const seconds=Math.round(max*i/3),y=180-150*i/3;
@@ -60,7 +60,7 @@ function overviewChart(rows,metric='duration'){
  list.forEach((row,i)=>{
   const c=row.contraction,value=row[metric],h=value/1000/max*150,x=axisStart+5+i*bar;
   const fill={mild:'#91aa70',moderate:'#d3aa6c',strong:'#ba8589'}[c.intensity]||'#b4beb0';
-  const seconds=value/1000;
+  const seconds=Math.round(value/1000);
   const label=`${clock(c.startedAt)} · ${secondsFormat.format(seconds)} ${seconds===1?'second':'seconds'} · ${labelIntensity(c)}`;
   svg+=`<g class="chart-point" role="button" tabindex="0" aria-label="${esc(label)}">
    <rect class="chart-hit-area" x="${x-bar*.175}" y="30" width="${bar}" height="150" fill="transparent" />
