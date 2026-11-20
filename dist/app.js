@@ -50,6 +50,7 @@ function overviewChart(rows,metric='duration'){
  const max=Math.max(60,...list.map(row=>row[metric]/1000));
  const axisStart=isSpacing?75:55;
  const bar=(735-axisStart)/list.length;
+ const secondsFormat=new Intl.NumberFormat(undefined,{maximumFractionDigits:3,useGrouping:false});
  let svg='';
  for(let i=0;i<4;i++){
   const seconds=Math.round(max*i/3),y=180-150*i/3;
@@ -59,10 +60,45 @@ function overviewChart(rows,metric='duration'){
  list.forEach((row,i)=>{
   const c=row.contraction,value=row[metric],h=value/1000/max*150,x=axisStart+5+i*bar;
   const fill={mild:'#91aa70',moderate:'#d3aa6c',strong:'#ba8589'}[c.intensity]||'#b4beb0';
-  svg+=`<rect x="${x}" y="${180-h}" width="${bar*.65}" height="${h}" rx="2" fill="${fill}"><title>${clock(c.startedAt)} · ${formatTime(value)} · ${labelIntensity(c)}</title></rect>`;
+  const seconds=value/1000;
+  const label=`${clock(c.startedAt)} · ${secondsFormat.format(seconds)} ${seconds===1?'second':'seconds'} · ${labelIntensity(c)}`;
+  svg+=`<g class="chart-point" role="button" tabindex="0" aria-label="${esc(label)}">
+   <rect class="chart-hit-area" x="${x-bar*.175}" y="30" width="${bar}" height="150" fill="transparent" />
+   <rect class="chart-bar" x="${x}" y="${180-h}" width="${bar*.65}" height="${h}" rx="2" fill="${fill}" />
+  </g>`;
   if(i%Math.max(1,Math.ceil(list.length/5))===0)svg+=`<text x="${x+bar*.3}" y="205" text-anchor="middle">${clock(c.startedAt).replace(/:\d{2}(?=\s|$)/,'')}</text>`;
  });
- return `<article class="content-card"><h3>${title}</h3><p>${description}</p><div class="chart-scroll"><svg class="contraction-chart" viewBox="0 0 780 220" role="img" aria-label="${chartLabel}">${svg}</svg></div><div class="chart-legend"><span><i style="background:#91aa70"></i>Mild</span><span><i style="background:#d3aa6c"></i>Moderate</span><span><i style="background:#ba8589"></i>Strong</span><span><i style="background:#b4beb0"></i>Not recorded</span></div></article>`;
+ return `<article class="content-card"><h3>${title}</h3><p>${description}</p><div class="chart-scroll chart-plot"><svg class="contraction-chart" viewBox="0 0 780 220" role="group" aria-label="${chartLabel}">${svg}</svg><div class="chart-tooltip" aria-hidden="true" hidden></div></div><div class="chart-legend"><span><i style="background:#91aa70"></i>Mild</span><span><i style="background:#d3aa6c"></i>Moderate</span><span><i style="background:#ba8589"></i>Strong</span><span><i style="background:#b4beb0"></i>Not recorded</span></div></article>`;
+}
+function bindOverviewCharts(){
+ $$('.chart-plot').forEach(plot=>{
+  const tooltip=plot.querySelector('.chart-tooltip');
+  const hide=()=>{tooltip.hidden=true;};
+  const show=point=>{
+   tooltip.textContent=point.getAttribute('aria-label');
+   tooltip.hidden=false;
+   const frame=plot.getBoundingClientRect();
+   const bar=point.querySelector('.chart-bar').getBoundingClientRect();
+   const center=bar.left-frame.left+bar.width/2;
+   const left=Math.max(0,Math.min(center-tooltip.offsetWidth/2,frame.width-tooltip.offsetWidth));
+   tooltip.style.left=`${left}px`;
+   tooltip.style.top=`${Math.max(0,bar.top-frame.top-tooltip.offsetHeight-4)}px`;
+  };
+  plot.querySelectorAll('.chart-point').forEach(point=>{
+   point.onpointerenter=e=>{if(e.pointerType!=='touch')show(point);};
+   point.onpointerleave=e=>{if(e.pointerType!=='touch'&&!point.matches(':focus-visible'))hide();};
+   point.onfocus=()=>show(point);
+   point.onblur=hide;
+   point.onclick=()=>show(point);
+   point.onkeydown=e=>{
+    if(e.key==='Escape')hide();
+    if(e.key==='Enter'||e.key===' '){
+     e.preventDefault();
+     show(point);
+    }
+   };
+  });
+ });
 }
 function overviewPage(){const since=startOfRange(overviewRange),s=recentSummary(data.contractions,since);return heading('A RECORD TO SHARE','Your overview.','A clear summary for a conversation with your maternity team.',`<select id="overview-range" class="button primary period-select" aria-label="Overview range">${[['60','Last hour'],['360','Last 6 hours'],['1440','Last 24 hours'],['all','All records']].map(([v,l])=>`<option value="${v}" ${v===overviewRange?'selected':''}>${l}</option>`).join('')}</select>`)+`<div class="summary-grid">${stat(s.count,'Recorded starts','In the selected range')}${stat(formatTime(s.averageDuration),'Average duration','Completed contractions only')}${stat(formatTime(s.averageSpacing),'Average spacing','Pairs of starts in this range')}</div>${overviewChart(s.rows)}${overviewChart(s.rows,'spacing')}<article class="content-card"><div class="section-heading"><h3>Contraction timings</h3><button class="text-button" id="print-overview">Print / save PDF</button></div><p>Start-to-start spacing is different from rest time. These are recorded observations, not an assessment of labour.</p><div class="chart-table-wrap"><table class="summary-table"><thead><tr><th>Start</th><th>Duration</th><th>Start to start</th><th>Rest before</th><th>Intensity</th></tr></thead><tbody>${[...s.rows].reverse().map(r=>`<tr><td>${date(r.contraction.startedAt)} ${clock(r.contraction.startedAt)}</td><td>${r.duration===null?'Timing…':formatTime(r.duration)}</td><td>${formatTime(r.spacing)}</td><td>${formatTime(r.rest)}</td><td>${labelIntensity(r.contraction)}</td></tr>`).join('')}</tbody></table>${!s.count?'<p class="info-note">No contractions in this range.</p>':''}</div></article><article class="content-card"><h3>Related events</h3>${data.events.filter(e=>Date.parse(e.occurredAt)>=since).length?data.events.filter(e=>Date.parse(e.occurredAt)>=since).sort((a,b)=>Date.parse(b.occurredAt)-Date.parse(a.occurredAt)).map(eventCard).join(''):'<p>No events recorded in this range.</p>'}</article><div class="print-only"><h2>Care notes</h2><p>${esc(data.settings.instructions)}</p>${s.rows.map(r=>contractionCard(r.contraction)).join('')}</div>`;}
 function carePage(){const s=data.settings;return heading('A LITTLE SUPPORT, CLOSE BY','Care & data.','Your contact, your notes, and your records.')+`<article class="content-card urgent-card"><h3>When you need support</h3><p>Contact your maternity team if you’re unsure or concerned. Seek urgent advice for signs of labour before 37 weeks, bleeding, reduced or changed baby movements, coloured or smelly waters, or persistent severe pain between contractions. Contact them if your waters break.</p><p>If birth seems imminent or there is heavy bleeding, call emergency services. <strong>In Australia: 000.</strong></p><p>You don’t need to wait for a timer pattern. This app cannot tell whether you’re in active labour or when it is safe to stay home.</p><a class="button primary" href="${esc(callLink())}">${s.phone?'Call maternity contact':'Add your maternity contact'}</a><p class="info-note"><a class="source-link" href="https://www.pregnancybirthbaby.org.au/labour-and-birth/labour/giving-birth-early-signs-of-labour" target="_blank" rel="noopener noreferrer">Pregnancy, Birth and Baby: signs of labour ↗</a> · <a class="source-link" href="https://www.pregnancybirthbaby.org.au/labour-and-birth/labour/giving-birth-contractions" target="_blank" rel="noopener noreferrer">Timing contractions ↗</a></p></article><article class="content-card"><h3>Your maternity contact & plan</h3><p>Optional details, saved only on this device. Follow the instructions your maternity team has given you.</p><form id="care-form"><div class="care-grid"><div><label for="maternity-name">Maternity unit / midwife</label><input id="maternity-name" maxlength="200" value="${esc(s.maternityName)}" placeholder="Your care team"></div><div><label for="phone">Phone number</label><input id="phone" type="tel" maxlength="40" value="${esc(s.phone)}" placeholder="Include area code"></div><div><label for="gestation">Gestation (optional note)</label><input id="gestation" maxlength="200" value="${esc(s.gestation)}" placeholder="For example, 39 weeks + 2 days"></div><div><label for="due-date">Due date (optional)</label><input id="due-date" type="date" value="${esc(s.dueDate)}"></div></div><label for="care-notes">Your maternity team’s instructions</label><textarea id="care-notes" rows="3" maxlength="10000" placeholder="When to call, where to go, anything to remember…">${esc(s.instructions)}</textarea><button class="button primary" type="submit">Save care details</button><p id="care-error" class="error" role="alert"></p></form></article><article class="content-card"><h3>Your records stay here</h3><p>Records are stored in this browser, on this device. They are separate from your headache diary and don’t sync across devices. Browser storage is not encrypted; anyone using the same browser profile may be able to read it. Clearing browser data can remove records.</p><p>Download a backup regularly. Backups and CSV files contain health information. Import merges records by ID and keeps the latest update. Import fills empty care settings and keeps existing values.</p><div class="action-row"><button class="button primary" id="backup">Download backup</button><button class="button" id="export-csv">Export CSV</button><button class="button" id="import-backup">Import backup</button></div>${blocked?'<p class="error">Saved data needs attention. Download the original file before making changes.</p><button class="button" id="raw-backup">Download original data</button>':''}</article><article class="content-card"><h3>Keep your timer close</h3><p><strong>Android · Chrome:</strong> open this app, tap the three-dot menu, then Install and create shortcut / Add to home screen. Choose Install or Create shortcut and confirm.</p><p><strong>iPhone / iPad · Safari:</strong> open this app, tap Share (or Page Menu → Share), then Add to Home Screen. Keep Open as Web App on if shown and tap Add.</p><p>Adding an icon is not a backup. Some devices keep installed-app data separately: export and import a backup if your records don’t appear.</p><p id="offline-status" class="info-note">Checking offline app availability…</p></article>`;}
@@ -75,7 +111,11 @@ function render(){
  $('#page').innerHTML=(loadError?`<div class="load-error" role="alert">${esc(loadError)} <a href="#care">Care & data →</a></div>`:'')+({timer:timerPage,history:historyPage,overview:overviewPage,care:carePage}[page])();bindCards();
  if(page==='timer'){ $('#timer-button').onclick=toggleTimer;if($('#adjust-active'))$('#adjust-active').onclick=()=>openContraction(running());}
  if(page==='history'){$('#history-range').onchange=e=>{historyRange=e.target.value;render();};$('#history-search').oninput=e=>{const pos=e.target.selectionStart;query=e.target.value;render();$('#history-search').focus();$('#history-search').setSelectionRange(pos,pos);};}
- if(page==='overview'){$('#overview-range').onchange=e=>{overviewRange=e.target.value;render();};$('#print-overview').onclick=()=>window.print();}
+ if(page==='overview'){
+  $('#overview-range').onchange=e=>{overviewRange=e.target.value;render();};
+  $('#print-overview').onclick=()=>window.print();
+  bindOverviewCharts();
+ }
  if(page==='care'){ $('#care-form').onsubmit=e=>{e.preventDefault();try{save({...data,settings:{maternityName:$('#maternity-name').value.trim(),phone:$('#phone').value.trim(),gestation:$('#gestation').value.trim(),dueDate:$('#due-date').value,instructions:$('#care-notes').value.trim()}});render();toast('Care details saved.');}catch(err){$('#care-error').textContent=errorMessage(err);}};$('#backup').onclick=backup;$('#export-csv').onclick=()=>download('contractions.csv',csvExport(data),'text/csv;charset=utf-8');$('#import-backup').onclick=()=>$('#import-file').click();if($('#raw-backup'))$('#raw-backup').onclick=()=>download('contractions-original.json',raw||'','application/json');offlineStatus();}
 }
 function toggleTimer(){if(Date.now()-lastTimerClick<400)return;lastTimerClick=Date.now();try{const active=running(),now=new Date().toISOString();if(active){save({...data,contractions:data.contractions.map(c=>c.id===active.id?{...c,endedAt:now,updatedAt:now}:c)});restored=false;render();toast('Contraction saved. Add details whenever you like.');}else{save({...data,contractions:[...data.contractions,{id:crypto.randomUUID(),startedAt:now,endedAt:null,intensity:null,location:'',comfort:[],notes:'',createdAt:now,updatedAt:now}]});restored=false;render();}}catch(e){toast(errorMessage(e));}}
