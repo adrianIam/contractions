@@ -82,16 +82,20 @@ function overviewChart(list,metric,axis,countLabel){
  const description=isSpacing
   ?`${countLabel} start-to-start intervals in this range. The red line marks 5 minutes.`
   :`${countLabel} completed contractions in this range.`;
- const chartLabel=isSpacing?'Recent start-to-start intervals between contractions':'Recent contraction durations, in seconds';
+ const chartLabel=isSpacing?'Recent start-to-start intervals between contractions':'Recent contraction durations';
  const spacingReferenceSeconds=5*60;
- const max=Math.max(isSpacing?spacingReferenceSeconds+60:60,...list.map(row=>row[metric]/1000));
+ const peak=Math.max(isSpacing?spacingReferenceSeconds+60:60,...list.map(row=>row[metric]/1000));
+ const targetStep=peak/4;
+ const tickSteps=[15,20,30,45,60,90,120,180,300,600,900,1200,1800,3600,7200,10800,21600,43200,86400];
+ const step=tickSteps.find(seconds=>seconds>=targetStep)??Math.ceil(targetStep/86400)*86400;
+ const max=Math.ceil(peak/step)*step;
  const positions=list.map(row=>axis.xAt(Date.parse(row.contraction.startedAt)));
  const secondsFormat=new Intl.NumberFormat(undefined,{useGrouping:false});
  const minuteClock=new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'});
  let svg=axis.ticks;
- for(let i=0;i<4;i++){
-  const seconds=Math.round(max*i/3),y=180-150*i/3;
-  const tick=isSpacing?formatTime(seconds*1000):`${seconds}s`;
+ for(let seconds=0;seconds<=max;seconds+=step){
+  const y=180-150*seconds/max;
+  const tick=formatTime(seconds*1000);
   svg+=`<line x1="${chartLeft}" y1="${y}" x2="${chartRight}" y2="${y}" stroke="#e5e8e1"/><text x="${chartLeft-10}" y="${y+4}" text-anchor="end">${tick}</text>`;
  }
  list.forEach((row,i)=>{
