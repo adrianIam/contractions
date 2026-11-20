@@ -44,13 +44,15 @@ function overviewChart(rows,metric='duration'){
    :'<div class="empty-state"><h3>A picture will build as you record.</h3><p>Complete a contraction to start your recent timeline.</p></div>';
  }
  const description=isSpacing
-  ?'Up to the last 20 start-to-start intervals in this range, coloured by the later contraction’s intensity.'
+  ?'Up to the last 20 start-to-start intervals in this range. The red line marks 5 minutes.'
   :'Up to the last 20 completed contractions in this range.';
  const chartLabel=isSpacing?'Recent start-to-start intervals between contractions':'Recent contraction durations, in seconds';
- const max=Math.max(60,...list.map(row=>row[metric]/1000));
+ const spacingReferenceSeconds=5*60;
+ const max=Math.max(isSpacing?spacingReferenceSeconds+60:60,...list.map(row=>row[metric]/1000));
  const axisStart=isSpacing?75:55;
  const bar=(735-axisStart)/list.length;
  const secondsFormat=new Intl.NumberFormat(undefined,{useGrouping:false});
+ const minuteClock=new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit'});
  let svg='';
  for(let i=0;i<4;i++){
   const seconds=Math.round(max*i/3),y=180-150*i/3;
@@ -59,16 +61,22 @@ function overviewChart(rows,metric='duration'){
  }
  list.forEach((row,i)=>{
   const c=row.contraction,value=row[metric],h=value/1000/max*150,x=axisStart+5+i*bar;
-  const fill={mild:'#91aa70',moderate:'#d3aa6c',strong:'#ba8589'}[c.intensity]||'#b4beb0';
+  const fill=isSpacing?'#819582':({mild:'#91aa70',moderate:'#d3aa6c',strong:'#ba8589'}[c.intensity]||'#b4beb0');
   const seconds=Math.round(value/1000);
-  const label=`${clock(c.startedAt)} · ${secondsFormat.format(seconds)} ${seconds===1?'second':'seconds'} · ${labelIntensity(c)}`;
+  const startMinute=Math.round(Date.parse(c.startedAt)/60000)*60000;
+  const label=`${minuteClock.format(startMinute)} · ${secondsFormat.format(seconds)} ${seconds===1?'second':'seconds'}`;
   svg+=`<g class="chart-point" role="button" tabindex="0" aria-label="${esc(label)}">
    <rect class="chart-hit-area" x="${x-bar*.175}" y="30" width="${bar}" height="150" fill="transparent" />
    <rect class="chart-bar" x="${x}" y="${180-h}" width="${bar*.65}" height="${h}" rx="2" fill="${fill}" />
   </g>`;
   if(i%Math.max(1,Math.ceil(list.length/5))===0)svg+=`<text x="${x+bar*.3}" y="205" text-anchor="middle">${clock(c.startedAt).replace(/:\d{2}(?=\s|$)/,'')}</text>`;
  });
- return `<article class="content-card"><h3>${title}</h3><p>${description}</p><div class="chart-scroll chart-plot"><svg class="contraction-chart" viewBox="0 0 780 220" role="group" aria-label="${chartLabel}">${svg}</svg><div class="chart-tooltip" aria-hidden="true" hidden></div></div><div class="chart-legend"><span><i style="background:#91aa70"></i>Mild</span><span><i style="background:#d3aa6c"></i>Moderate</span><span><i style="background:#ba8589"></i>Strong</span><span><i style="background:#b4beb0"></i>Not recorded</span></div></article>`;
+ if(isSpacing){
+  const y=180-150*spacingReferenceSeconds/max;
+  svg+=`<line x1="${axisStart}" y1="${y}" x2="755" y2="${y}" stroke="#b66c6b" stroke-opacity=".55" vector-effect="non-scaling-stroke" pointer-events="none" />`;
+ }
+ const legend=isSpacing?'':'<div class="chart-legend"><span><i style="background:#91aa70"></i>Mild</span><span><i style="background:#d3aa6c"></i>Moderate</span><span><i style="background:#ba8589"></i>Strong</span><span><i style="background:#b4beb0"></i>Not recorded</span></div>';
+ return `<article class="content-card"><h3>${title}</h3><p>${description}</p><div class="chart-scroll chart-plot"><svg class="contraction-chart" viewBox="0 0 780 220" role="group" aria-label="${chartLabel}">${svg}</svg><div class="chart-tooltip" aria-hidden="true" hidden></div></div>${legend}</article>`;
 }
 function bindOverviewCharts(){
  $$('.chart-plot').forEach(plot=>{
